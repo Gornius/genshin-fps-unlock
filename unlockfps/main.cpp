@@ -23,6 +23,7 @@
 bool bStop = false;
 std::string GamePath{};
 int FpsValue = FPS_TARGET;
+bool ForceFocus = true;
 
 // didnt made this pattern scan - c+p'd from somewhere
 uintptr_t PatternScan(void* module, const char* signature)
@@ -136,7 +137,8 @@ bool WriteConfig(std::string GamePath, int fps)
     std::string content{};
     content = "[Setting]\n";
     content += "Path=" + GamePath + "\n";
-    content += "FPS=" + std::to_string(fps);
+    content += "FPS=" + std::to_string(fps) + "\n";
+    content += "ForceFocus=" + std::to_string(ForceFocus);
 
     DWORD written = 0;
     WriteFile(hFile, content.data(), content.size(), &written, nullptr);
@@ -189,6 +191,7 @@ void LoadConfig()
 
     GamePath = reader.Get("Setting", "Path", "");
     FpsValue = reader.GetInteger("Setting", "FPS", FpsValue);
+    ForceFocus = reader.GetBoolean("Setting", "ForceFocus", true);
 
     if (GetFileAttributesA(GamePath.c_str()) == INVALID_FILE_ATTRIBUTES)
     {
@@ -242,12 +245,19 @@ DWORD __stdcall Thread1(LPVOID p)
     if (!p)
         return 0;
 
+    HWND hwnd = nullptr;
+    while (!(hwnd = FindWindowA("UnityWndClass", nullptr)))
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+
     int* pTargetFPS = (int*)p;
     int fps = *pTargetFPS;
     int prev = fps;
     while (!bStop)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
+        if (ForceFocus && GetForegroundWindow() != hwnd)
+            continue;
         if (GetAsyncKeyState(KEY_DECREASE) & 1)
             fps -= 20;
         if (GetAsyncKeyState(KEY_DECREASE_SMALL) & 1)
@@ -382,6 +392,12 @@ int main(int argc, char** argv)
     printf("  DOWN:  -20\n");
     printf("  LEFT:  -2\n");
     printf("  RIGHT: +2\n\n");
+
+    if (ForceFocus) {
+        printf("Looks like you're using build with \"ForceFocus\" feature, which disables hotkeys while game is not focused. To disable this functionality, change to:\n");
+        printf("ForceFocus=0\n");
+        printf("in \"config.ini\" to disable hotkeys while outside of the game\n\n");
+    }
 
     // keybinds thread
     HANDLE hThread = CreateThread(nullptr, 0, Thread1, &TargetFPS, 0, nullptr);
